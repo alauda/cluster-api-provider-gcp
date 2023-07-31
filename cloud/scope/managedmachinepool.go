@@ -172,6 +172,9 @@ func ConvertToSdkNodePool(nodePool infrav1exp.GCPManagedMachinePool, machinePool
 			Metadata: nodePool.Spec.AdditionalLabels,
 		},
 	}
+	if sdkNodePool.Config.MachineType == "" && len(nodePool.Annotations) > 0 {
+		sdkNodePool.Config.MachineType = nodePool.Annotations["cluster.x-k8s.io/machine-type"]
+	}
 	if nodePool.Spec.Scaling != nil {
 		sdkNodePool.Autoscaling = &containerpb.NodePoolAutoscaling{
 			Enabled:      true,
