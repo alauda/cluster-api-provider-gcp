@@ -181,6 +181,10 @@ func ConvertToSdkNodePool(nodePool infrav1exp.GCPManagedMachinePool, machinePool
 			MinNodeCount: *nodePool.Spec.Scaling.MinCount,
 			MaxNodeCount: *nodePool.Spec.Scaling.MaxCount,
 		}
+	} else {
+		sdkNodePool.Autoscaling = &containerpb.NodePoolAutoscaling{
+			Enabled: false,
+		}
 	}
 	if machinePool.Spec.Template.Spec.Version != nil {
 		sdkNodePool.Version = *machinePool.Spec.Template.Spec.Version

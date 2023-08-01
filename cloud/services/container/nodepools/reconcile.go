@@ -363,7 +363,7 @@ func (s *Service) checkDiffAndPrepareUpdateAutoscaling(existingNodePool *contain
 	isRegional := shared.IsRegional(s.scope.Region())
 
 	desiredAutoscaling := scope.ConvertToSdkNodePool(*s.scope.GCPManagedMachinePool, *s.scope.MachinePool, isRegional).Autoscaling
-	var existingAutoscaling *containerpb.NodePoolAutoscaling
+	existingAutoscaling := &containerpb.NodePoolAutoscaling{Enabled: false}
 	if existingNodePool.Autoscaling != nil && existingNodePool.Autoscaling.Enabled {
 		existingAutoscaling = &containerpb.NodePoolAutoscaling{
 			Enabled:      true,
