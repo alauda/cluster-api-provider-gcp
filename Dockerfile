@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Build the manager binary
-FROM golang:1.19.10@sha256:83f9f840072d05ad4d90ce4ac7cb2427632d6b89d5ffc558f18f9577ec8188c0 as builder
+FROM golang:1.19.10 as builder
 WORKDIR /workspace
 
 # Run this with docker build --build_arg $(go env GOPROXY) to override the goproxy
@@ -33,7 +33,7 @@ COPY ./ ./
 # Build
 ARG ARCH
 ARG LDFLAGS
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} \
+RUN CGO_ENABLED=0 GOOS=linux \
     go build -a -trimpath -ldflags "${LDFLAGS} -extldflags '-static'" \
     -o manager .
 
