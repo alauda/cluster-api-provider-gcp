@@ -64,7 +64,7 @@ func (s *Service) reconcileKubeconfig(ctx context.Context, cluster *containerpb.
 		); createErr != nil {
 			return fmt.Errorf("creating kubeconfig secret: %w", createErr)
 		}
-	} else if updateErr := s.updateCAPIKubeconfigSecret(ctx, configSecret); updateErr != nil {
+	} else if updateErr := s.updateCAPIKubeconfigSecret(ctx, cluster, configSecret); updateErr != nil {
 		return fmt.Errorf("updating kubeconfig secret: %w", err)
 	}
 
@@ -173,23 +173,29 @@ func (s *Service) createCAPIKubeconfigSecret(ctx context.Context, cluster *conta
 	return nil
 }
 
-func (s *Service) updateCAPIKubeconfigSecret(ctx context.Context, configSecret *corev1.Secret) error {
+func (s *Service) updateCAPIKubeconfigSecret(ctx context.Context, cluster *containerpb.Cluster, configSecret *corev1.Secret) error {
 	data, ok := configSecret.Data[secret.KubeconfigDataName]
 	if !ok {
 		return errors.Errorf("missing key %q in secret data", secret.KubeconfigDataName)
 	}
 
+	contextName := s.getKubeConfigContextName(false)
 	config, err := clientcmd.Load(data)
 	if err != nil {
 		return errors.Wrap(err, "failed to convert kubeconfig Secret into a clientcmdapi.Config")
 	}
 
+	mirror, err := s.createBaseKubeConfig(contextName, cluster)
+	if err != nil {
+		return fmt.Errorf("creating base kubeconfig: %w", err)
+	}
+	config.Clusters[contextName].Server = mirror.Clusters[contextName].Server
+	config.Clusters[contextName].CertificateAuthorityData = mirror.Clusters[contextName].CertificateAuthorityData
+
 	token, err := s.generateToken(ctx)
 	if err != nil {
 		return err
 	}
-
-	contextName := s.getKubeConfigContextName(false)
 	config.AuthInfos[contextName].Token = token
 
 	out, err := clientcmd.Write(*config)
