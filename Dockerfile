@@ -13,16 +13,15 @@
 # limitations under the License.
 
 # Build the manager binary
-FROM golang:1.19.10 as builder
+FROM build-harbor.alauda.cn/sync/library/golang:1.19 as builder
 WORKDIR /workspace
 
 # Run this with docker build --build_arg $(go env GOPROXY) to override the goproxy
-ARG goproxy=https://proxy.golang.org
-ENV GOPROXY=$goproxy
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY:-https://proxy.golang.org}
 
 # Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY go.mod go.sum ./
 # Cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
@@ -38,8 +37,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
     -o manager .
 
 # Copy the controller-manager into a thin image
-FROM gcr.io/distroless/static:latest
+FROM build-harbor.alauda.cn/sync/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/manager .
-USER nobody
+COPY --from=builder --chmod=755 /workspace/manager /
 ENTRYPOINT ["/manager"]
