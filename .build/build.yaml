@@ -1,0 +1,103 @@
+apiVersion: builds.katanomi.dev/v1alpha1
+kind: Build
+spec:
+  workspaces:
+    - description: |
+        This workspace is shared among all the pipeline tasks to read/write common resources
+      name: source
+    - description: golang cache
+      name: cache
+      optional: true
+  runTemplate:
+    spec:
+      taskRunSpecs:
+        - pipelineTaskName: build-image
+          stepOverrides:
+            - name: build
+              resources:
+                requests:
+                  cpu: 1000m
+                  memory: 1024Mi
+                limits:
+                  cpu: 1000m
+                  memory: 1024Mi
+  results:
+    - name: capa_tag
+      value: $(tasks.custom-task-0.results.capa_tag)
+  tasks:
+    - name: custom-task-0
+      timeout: 5m
+      retries: 1
+      workspaces:
+        - name: source
+          workspace: source
+      taskSpec:
+        description: |
+          set the version
+        workspaces:
+          - name: source
+            workspace: source
+        results:
+          - name: capa_tag
+        steps:
+          - name: set-version
+            image: build-harbor.alauda.cn/ops/alpine:latest
+            imagePullPolicy: IfNotPresent
+            workingDir: $(workspaces.source.path)
+            script: |
+              #!/bin/sh
+              set -x
+              sed -i -E -e '/./!d' -e '/^\//d' -e 's/^env.//' -e 's/ *= */=/' ./version.groovy
+              source ./version.groovy
+              printf "$CAPA_TAG" | tee $(results.capa_tag.path)
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+    - name: build-image
+      runAfter:
+        - custom-task-0
+      timeout: 15m
+      retries: 1
+      taskRef:
+        kind: ClusterTask
+        name: alauda-build-image
+      workspaces:
+        - name: source
+          workspace: source
+      when: []
+      params:
+        - name: container-image
+          value: build-harbor.alauda.cn/ait/cluster-api-gcp-controller
+        - name: container-image-tag
+          value: $(tasks.custom-task-0.results.capa_tag)
+        - name: labels
+          value:
+            - branch=$(build.git.branch.name)
+            - commit=$(build.git.lastCommit.id)
+finally:
+  - name: release-tag
+    when:
+      - input: $(build.git.versionPhase)
+        operator: in
+        values:
+          - custom
+          - ga
+      - input: $(tasks.status)
+        operator: in
+        values:
+          - Succeeded
+          - Completed
+    timeout: 30m
+    retries: 1
+    taskRef:
+      kind: ClusterTask
+      name: alauda-release-tag
+    workspaces:
+      - name: source
+        workspace: source
+    params:
+      - name: verbose
+        value: "false"
+      - name: version
+        value: $(build.git.version.docker)
