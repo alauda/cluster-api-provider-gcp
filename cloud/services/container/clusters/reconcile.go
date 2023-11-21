@@ -20,20 +20,21 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
-	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/shared"
-
 	"cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/go-logr/logr"
 	"github.com/googleapis/gax-go/v2/apierror"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
-	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
-	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/scope"
+	"sigs.k8s.io/cluster-api-provider-gcp/cloud/services/shared"
+	infrav1exp "sigs.k8s.io/cluster-api-provider-gcp/exp/api/v1beta1"
+	"sigs.k8s.io/cluster-api-provider-gcp/util/reconciler"
 )
 
 // Reconcile reconcile GKE cluster.
@@ -93,6 +94,11 @@ func (s *Service) Reconcile(ctx context.Context) (ctrl.Result, error) {
 	}
 
 	log.V(2).Info("gke cluster found", "status", cluster.Status)
+	if err = s.deleteUnmanagedNodePools(ctx); err != nil {
+		log.Error(err, "failed to delete unmanaged node pools", "cluster", s.scope.ClusterName())
+		return ctrl.Result{}, err
+	}
+
 	s.scope.GCPManagedControlPlane.Status.CurrentVersion = cluster.CurrentMasterVersion
 
 	switch cluster.Status {
@@ -341,4 +347,46 @@ func (s *Service) checkDiffAndPrepareUpdate(existingCluster *containerpb.Cluster
 		Update: &clusterUpdate,
 	}
 	return needUpdate, &updateClusterRequest
+}
+
+func (s *Service) deleteUnmanagedNodePools(ctx context.Context) error {
+	log := log.FromContext(ctx).WithValues("controller", "container.clusters", "action", "deleteUnmanagedNodePools")
+	log.Info("Delete unmanaged node pools")
+	clusterName, namespace := s.scope.ClusterName(), s.scope.Cluster.Namespace
+	listOptions := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(map[string]string{clusterv1.ClusterNameLabel: clusterName}),
+	}
+	managedMachinePools := &infrav1exp.GCPManagedMachinePoolList{}
+	if err := s.scope.Client().List(ctx, managedMachinePools, listOptions...); err != nil {
+		return fmt.Errorf("failed to list managed machine pools for cluster %s/%s: %w", namespace, clusterName, err)
+	}
+	poolMap := make(map[string]struct{})
+	for _, pool := range managedMachinePools.Items {
+		poolMap[pool.Spec.NodePoolName] = struct{}{}
+	}
+
+	list, err := s.scope.ManagedControlPlaneClient().ListNodePools(ctx, &containerpb.ListNodePoolsRequest{
+		Parent: fmt.Sprintf("projects/%s/locations/%s/clusters/%s",
+			s.scope.GCPManagedCluster.Spec.Project, s.scope.Region(), clusterName),
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to list node groups")
+	}
+	for _, pool := range list.NodePools {
+		if pool == nil {
+			continue
+		}
+		if _, ok := poolMap[pool.Name]; ok {
+			continue
+		}
+		_, err = s.scope.ManagedControlPlaneClient().DeleteNodePool(ctx, &containerpb.DeleteNodePoolRequest{
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+				s.scope.GCPManagedCluster.Spec.Project, s.scope.Region(), clusterName, pool.Name),
+		})
+		if err != nil {
+			return errors.Wrapf(err, "failed to delete node pool %s in cluster %s/%s", pool.Name, namespace, clusterName)
+		}
+	}
+	return nil
 }
