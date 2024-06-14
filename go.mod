@@ -1,10 +1,10 @@
 module sigs.k8s.io/cluster-api-provider-gcp
 
-go 1.19
+go 1.22.3
 
 replace (
 	golang.org/x/crypto => golang.org/x/crypto v0.17.0
-	golang.org/x/net => golang.org/x/net v0.17.0
+	golang.org/x/net => golang.org/x/net v0.23.0
 	google.golang.org/grpc => google.golang.org/grpc v1.56.3
 	google.golang.org/protobuf => google.golang.org/protobuf v1.33.0
 	sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v1.4.4
@@ -23,7 +23,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.14.0
+	golang.org/x/crypto v0.21.0
 	golang.org/x/mod v0.12.0
 	golang.org/x/net v0.12.0
 	google.golang.org/api v0.130.0
@@ -125,8 +125,8 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect; indirect// indirect
 	golang.org/x/oauth2 v0.9.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.9.3 // indirect
